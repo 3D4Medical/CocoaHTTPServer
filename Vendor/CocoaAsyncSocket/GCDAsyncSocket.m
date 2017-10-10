@@ -133,10 +133,9 @@ NSString *const GCDAsyncSocketThreadName = @"GCDAsyncSocket-CFStream";
 
 #if SECURE_TRANSPORT_MAYBE_AVAILABLE
 NSString *const GCDAsyncSocketSSLCipherSuites = @"GCDAsyncSocketSSLCipherSuites";
-#if TARGET_OS_IPHONE
 NSString *const GCDAsyncSocketSSLProtocolVersionMin = @"GCDAsyncSocketSSLProtocolVersionMin";
 NSString *const GCDAsyncSocketSSLProtocolVersionMax = @"GCDAsyncSocketSSLProtocolVersionMax";
-#else
+#if !TARGET_OS_IPHONE && TARGET_OS_MAC
 NSString *const GCDAsyncSocketSSLDiffieHellmanParameters = @"GCDAsyncSocketSSLDiffieHellmanParameters";
 #endif
 #endif
@@ -2708,11 +2707,7 @@ enum GCDAsyncSocketConfig
 			
 			SSLClose(sslContext);
 			
-			#if TARGET_OS_IPHONE
 			CFRelease(sslContext);
-			#else
-			SSLDisposeContext(sslContext);
-			#endif
 			
 			sslContext = NULL;
 		}
@@ -6156,30 +6151,17 @@ static OSStatus SSLWriteFunction(SSLConnectionRef connection, const void *data, 
 	// Create SSLContext, and setup IO callbacks and connection ref
 	
 	BOOL isServer = [[tlsSettings objectForKey:(NSString *)kCFStreamSSLIsServer] boolValue];
-	
-	#if TARGET_OS_IPHONE
-	{
-		if (isServer)
-			sslContext = SSLCreateContext(kCFAllocatorDefault, kSSLServerSide, kSSLStreamType);
-		else
-			sslContext = SSLCreateContext(kCFAllocatorDefault, kSSLClientSide, kSSLStreamType);
-		
-		if (sslContext == NULL)
-		{
-			[self closeWithError:[self otherError:@"Error in SSLCreateContext"]];
-			return;
-		}
-	}
-	#else
-	{
-		status = SSLNewContext(isServer, &sslContext);
-		if (status != noErr)
-		{
-			[self closeWithError:[self otherError:@"Error in SSLNewContext"]];
-			return;
-		}
-	}
-	#endif
+    
+    if (isServer)
+        sslContext = SSLCreateContext(kCFAllocatorDefault, kSSLServerSide, kSSLStreamType);
+    else
+        sslContext = SSLCreateContext(kCFAllocatorDefault, kSSLClientSide, kSSLStreamType);
+    
+    if (sslContext == NULL)
+    {
+        [self closeWithError:[self otherError:@"Error in SSLCreateContext"]];
+        return;
+    }
 	
 	status = SSLSetIOFuncs(sslContext, &SSLReadFunction, &SSLWriteFunction);
 	if (status != noErr)
@@ -6227,7 +6209,7 @@ static OSStatus SSLWriteFunction(SSLConnectionRef connection, const void *data, 
 			return;
 		}
 	}
-	
+	/*
 	// 2. kCFStreamSSLAllowsAnyRoot
 	
 	value = [tlsSettings objectForKey:(NSString *)kCFStreamSSLAllowsAnyRoot];
@@ -6269,7 +6251,7 @@ static OSStatus SSLWriteFunction(SSLConnectionRef connection, const void *data, 
 		
 		#endif
 	}
-	
+	*/
 	// 4. kCFStreamSSLValidatesCertificateChain
 	
 	value = [tlsSettings objectForKey:(NSString *)kCFStreamSSLValidatesCertificateChain];
@@ -6281,7 +6263,7 @@ static OSStatus SSLWriteFunction(SSLConnectionRef connection, const void *data, 
 		
 		BOOL validatesCertChain = [value boolValue];
 		
-		status = SSLSetEnableCertVerify(sslContext, validatesCertChain);
+        status = SSLSetSessionOption(sslContext,kSSLSessionOptionBreakOnServerAuth, validatesCertChain);
 		if (status != noErr)
 		{
 			[self closeWithError:[self otherError:@"Error in SSLSetEnableCertVerify"]];
@@ -6292,7 +6274,7 @@ static OSStatus SSLWriteFunction(SSLConnectionRef connection, const void *data, 
 	}
 	
 	// 5. kCFStreamSSLAllowsExpiredCertificates
-	
+	/*
 	value = [tlsSettings objectForKey:(NSString *)kCFStreamSSLAllowsExpiredCertificates];
 	if (value)
 	{
@@ -6311,7 +6293,7 @@ static OSStatus SSLWriteFunction(SSLConnectionRef connection, const void *data, 
 		
 		#endif
 	}
-	
+	*/
 	// 6. kCFStreamSSLCertificates
 	
 	value = [tlsSettings objectForKey:(NSString *)kCFStreamSSLCertificates];
@@ -6329,7 +6311,6 @@ static OSStatus SSLWriteFunction(SSLConnectionRef connection, const void *data, 
 	
 	// 7. kCFStreamSSLLevel
 	
-	#if TARGET_OS_IPHONE
 	{
 		NSString *sslLevel = [tlsSettings objectForKey:(NSString *)kCFStreamSSLLevel];
 		
@@ -6394,63 +6375,6 @@ static OSStatus SSLWriteFunction(SSLConnectionRef connection, const void *data, 
 			}
 		}
 	}
-	#else
-	{
-		value = [tlsSettings objectForKey:(NSString *)kCFStreamSSLLevel];
-		if (value)
-		{
-			NSString *sslLevel = (NSString *)value;
-			
-			OSStatus status1 = noErr;
-			OSStatus status2 = noErr;
-			OSStatus status3 = noErr;
-			
-			if ([sslLevel isEqualToString:(NSString *)kCFStreamSocketSecurityLevelSSLv2])
-			{
-				// kCFStreamSocketSecurityLevelSSLv2:
-				// 
-				// Specifies that SSL version 2 be set as the security protocol.
-				
-				status1 = SSLSetProtocolVersionEnabled(sslContext, kSSLProtocolAll, NO);
-				status2 = SSLSetProtocolVersionEnabled(sslContext, kSSLProtocol2,   YES);
-			}
-			else if ([sslLevel isEqualToString:(NSString *)kCFStreamSocketSecurityLevelSSLv3])
-			{
-				// kCFStreamSocketSecurityLevelSSLv3:
-				// 
-				// Specifies that SSL version 3 be set as the security protocol.
-				// If SSL version 3 is not available, specifies that SSL version 2 be set as the security protocol.
-				
-				status1 = SSLSetProtocolVersionEnabled(sslContext, kSSLProtocolAll, NO);
-				status2 = SSLSetProtocolVersionEnabled(sslContext, kSSLProtocol2,   YES);
-				status3 = SSLSetProtocolVersionEnabled(sslContext, kSSLProtocol3,   YES);
-			}
-			else if ([sslLevel isEqualToString:(NSString *)kCFStreamSocketSecurityLevelTLSv1])
-			{
-				// kCFStreamSocketSecurityLevelTLSv1:
-				// 
-				// Specifies that TLS version 1 be set as the security protocol.
-				
-				status1 = SSLSetProtocolVersionEnabled(sslContext, kSSLProtocolAll, NO);
-				status2 = SSLSetProtocolVersionEnabled(sslContext, kTLSProtocol1,   YES);
-			}
-			else if ([sslLevel isEqualToString:(NSString *)kCFStreamSocketSecurityLevelNegotiatedSSL])
-			{
-				// kCFStreamSocketSecurityLevelNegotiatedSSL:
-				// 
-				// Specifies that the highest level security protocol that can be negotiated be used.
-				
-				status1 = SSLSetProtocolVersionEnabled(sslContext, kSSLProtocolAll, YES);
-			}
-			
-			if (status1 != noErr || status2 != noErr || status3 != noErr)
-			{
-				[self closeWithError:[self otherError:@"Error in SSLSetProtocolVersionEnabled"]];
-				return;
-			}
-		}
-	}
-	#endif
 	
 	// 8. GCDAsyncSocketSSLCipherSuites
 	

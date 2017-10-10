@@ -868,7 +868,7 @@ static char *dd_str_copy(const char *str)
 		// If dispatch_get_current_queue() disappears, without a dispatch_queue_get_label() alternative,
 		// Apple will have effectively taken away our ability to properly log the name of executing dispatch queue.
 		
-		dispatch_queue_t currentQueue = dispatch_get_current_queue();
+		dispatch_queue_t currentQueue = NULL;
 		#pragma clang diagnostic pop
 		
 		queueLabel = dd_str_copy(dispatch_queue_get_label(currentQueue));

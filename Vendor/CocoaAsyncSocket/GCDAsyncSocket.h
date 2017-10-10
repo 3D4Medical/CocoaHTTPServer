@@ -67,10 +67,9 @@ extern NSString *const GCDAsyncSocketThreadName;
 
 #if SECURE_TRANSPORT_MAYBE_AVAILABLE
 extern NSString *const GCDAsyncSocketSSLCipherSuites;
-#if TARGET_OS_IPHONE
 extern NSString *const GCDAsyncSocketSSLProtocolVersionMin;
 extern NSString *const GCDAsyncSocketSSLProtocolVersionMax;
-#else
+#if !TARGET_OS_IPHONE && TARGET_OS_MAC
 extern NSString *const GCDAsyncSocketSSLDiffieHellmanParameters;
 #endif
 #endif
